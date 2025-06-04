@@ -23,18 +23,22 @@ jobs:
       - name: Show Forge version
         run: |
           forge --version
+        working-directory: contract
 
       - name: Run Forge fmt
         run: |
           forge fmt --check
         id: fmt
+        working-directory: contract
 
       - name: Run Forge build
         run: |
           forge build --sizes
         id: build
+        working-directory: contract
 
       - name: Run Forge tests
         run: |
           forge test -vvv
         id: test
+        working-directory: contract
