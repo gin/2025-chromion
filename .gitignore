@@ -1,0 +1,7 @@
+.env*
+
+.DS_Store
+
+# gitignore for now, and to be removed when the project is ready to deploy
+shared/abi/
+shared/addresses.json
