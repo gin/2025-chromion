@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:wallet-setup": "pnpm exec synpress tests/wallet-setup",
+    "test:e2e": "pnpm exec playwright test",
+    "test:show-report": "pnpm exec playwright show-report"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "~2.2.5",
