@@ -1,5 +1,5 @@
 "use client"
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface InputFieldProps {
   label: string;
@@ -9,7 +9,10 @@ interface InputFieldProps {
   large?: boolean;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   className?: string;
+  name?: string; // For identifying the field in storage
 }
+
+const APP_PREFIX = 'chromion';
 
 export default function InputField({
   label,
@@ -19,7 +22,41 @@ export default function InputField({
   large = false,
   onChange,
   className = '',
+  name,
 }: InputFieldProps) {
+  const storageKey = `${APP_PREFIX}:${name || label.toLowerCase().replace(/\s+/g, '-')}`;
+
+  // Load saved value on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedValue = localStorage.getItem(storageKey);
+      if (savedValue && savedValue !== value) {
+        const event = {
+          target: { value: savedValue }
+        } as React.ChangeEvent<HTMLInputElement>;
+        onChange(event);
+      }
+    }
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    onChange(e);
+    if (typeof window !== 'undefined') {
+      if (e.target.value) {
+        localStorage.setItem(storageKey, e.target.value);
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    }
+  };
+
+  // Function to clear storage (can be called by parent)
+  const clearStorage = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(storageKey);
+    }
+  };
+
   const inputStyles = `
     w-full
     px-4
@@ -27,7 +64,7 @@ export default function InputField({
     rounded-lg
     border
     border-gray-300
-    bg-white dark:bg-gray-600
+    bg-white dark:bg-gray-800
     focus:outline-none
     focus:ring-2
     focus:ring-green-500
@@ -47,7 +84,7 @@ export default function InputField({
         <textarea
           placeholder={placeholder}
           value={value}
-          onChange={onChange}
+          onChange={handleChange}
           className={`${inputStyles} min-h-[120px] resize-y`}
         />
       ) : (
@@ -55,7 +92,7 @@ export default function InputField({
           type={type}
           placeholder={placeholder}
           value={value}
-          onChange={onChange}
+          onChange={handleChange}
           className={inputStyles}
         />
       )}
