@@ -5,31 +5,8 @@ import { useState, useEffect } from "react"
 import { useChainId, useConfig, useAccount } from "wagmi"
 import { readContract, writeContract, waitForTransactionReceipt } from "wagmi/actions"
 
-const counterAbi = [
-    {
-        type: "function",
-        name: "increment",
-        inputs: [],
-        outputs: [],
-        stateMutability: "nonpayable"
-    },
-    {
-        type: "function",
-        name: "number",
-        inputs: [],
-        outputs: [{ name: "", type: "uint256" }],
-        stateMutability: "view"
-    },
-    {
-        type: "function",
-        name: "setNumber",
-        inputs: [{ name: "newNumber", type: "uint256" }],
-        outputs: [],
-        stateMutability: "nonpayable"
-    }
-] as const;
+import { abi as counterAbi } from "@/shared/abi/Counter.sol/Counter.json";
 
-// You'll need to replace this with your deployed contract address
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 
 export default function Form() {
