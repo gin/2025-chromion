@@ -2,13 +2,20 @@ import React, {useState, useEffect, useRef} from 'react';
 import {
   StyleSheet,
   View,
-  TouchableOpacity,
-  Text,
   Alert,
   Platform,
+  Text,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
-import MapView, {Marker, Polyline} from 'react-native-maps';
+import MapView from 'react-native-maps';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import MapControls from './MapControls';
+import HoleSelector from './HoleSelector';
+import ClubSelector from './ClubSelector';
+import ShotMarker from './ShotMarker';
+import ShotPath from './ShotPath';
 
 interface GolfShot {
   id: string;
@@ -18,7 +25,8 @@ interface GolfShot {
   };
   timestamp: Date;
   shotNumber: number;
-  accuracy: number;
+  holeNumber: number;
+  club: string | null; // option for when adding feature to speed up putts
 }
 
 interface UserLocation {
@@ -29,28 +37,71 @@ interface UserLocation {
 
 const MapScreen: React.FC = () => {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [currentHole, setCurrentHole] = useState(1);
+  const [initialRegion, setInitialRegion] = useState({
+    latitude: 33.66745,
+    longitude: -117.9298,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
   const [shots, setShots] = useState<GolfShot[]>([]);
-  const [isTracking, setIsTracking] = useState(false);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [initialMapLocation, setInitialMapLocation] = useState<UserLocation | null>(null);
+  const [showClubSelector, setShowClubSelector] = useState(false);
+  const [pendingShot, setPendingShot] = useState<UserLocation | null>(null);
   const mapRef = useRef<MapView>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
-  // Request location permissions
+  // Request foreground (during active use) and background (during lock screen, etc) location permissions
   const requestLocationPermission = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status === 'granted') {
-        setHasLocationPermission(true);
-        startLocationTracking();
-      } else {
+      const foreground = await Location.requestForegroundPermissionsAsync();
+      if (foreground.status !== 'granted') {
         Alert.alert(
           'Permission Denied',
           'Location permission is required to track your golf shots.'
         );
+        return;
       }
+
+      const background = await Location.requestBackgroundPermissionsAsync();
+      if (background.status !== 'granted') {
+        Alert.alert(
+          'Background Permission Denied',
+          'Background location permission is recommended for GPS responsiveness.'
+        );
+      }
+
+      setHasLocationPermission(true);
+      startLocationTracking();
     } catch (error) {
       console.log('Permission request error:', error);
+    }
+  };
+
+  const stopLocationTask = async () => {
+    try {
+      await Location.stopLocationUpdatesAsync('golf-gps-location');
+    } catch (error) {
+      console.log('Error stopping location updates:', error);
+    }
+  };
+
+  const cleanupLocationServices = () => {
+    if (locationSubscription.current) {
+      locationSubscription.current.remove();
+    }
+    stopLocationTask();
+  };
+
+  const handleMapLocationChange = (e: any) => {
+    if ((!userLocation || userLocation.accuracy > 1) && e.nativeEvent.coordinate) {
+      const mapLocation: UserLocation = {
+        latitude: e.nativeEvent.coordinate.latitude,
+        longitude: e.nativeEvent.coordinate.longitude,
+        accuracy: e.nativeEvent.coordinate.accuracy || 100, // Default to 100m accuracy
+      };
+      setInitialMapLocation(mapLocation);
     }
   };
 
@@ -59,13 +110,58 @@ const MapScreen: React.FC = () => {
       mapRef.current.animateToRegion({
         latitude,
         longitude,
-        latitudeDelta: 0.01, // More zoomed in for better accuracy
-        longitudeDelta: 0.01,
-      }, 1000); // 1 second animation
+        latitudeDelta: 0.001,  // Zoom level
+        longitudeDelta: 0.001, // Zoom level
+      }, 1000); // Zoom-in animation: 1 second
     }
   };
 
-  // Start location tracking
+  const getBestLocation = () => {
+    // Intent: Reduce users seeing map init before GPS is ready.
+    // Currently using hardcoded initial location of a golf course if GPS is not ready.
+    // TODO: alternative is to get last known location from AsyncStorage or last golf course user played.
+    return (userLocation && userLocation.accuracy <= 50) ? userLocation : initialMapLocation;
+  };
+
+  const saveLastLocation = async (location: UserLocation) => {
+    try {
+      await AsyncStorage.setItem('lastKnownLocation', JSON.stringify({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch (error) {
+      console.log('Error saving location:', error);
+    }
+  };
+
+  const loadLastLocation = async () => {
+    // TODO: or get location of previous golf course user played.
+    try {
+      const savedLocation = await AsyncStorage.getItem('lastKnownLocation');
+      if (savedLocation) {
+        const location = JSON.parse(savedLocation);
+        centerMapOnLocation(location.latitude, location.longitude);
+      }
+    } catch (error) {
+      console.log('Error loading location:', error);
+    }
+  };
+
+  const handleLocationUpdate = (location: Location.LocationObject) => {
+    const accuracy = location.coords.accuracy || 100;
+    const newLocation: UserLocation = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      accuracy: accuracy,
+    };
+
+    if (!userLocation || accuracy < userLocation.accuracy) {
+      setUserLocation(newLocation);
+      saveLastLocation(newLocation);
+    }
+  };
+
   const startLocationTracking = async () => {
     if (!hasLocationPermission) {
       requestLocationPermission();
@@ -73,92 +169,152 @@ const MapScreen: React.FC = () => {
     }
 
     try {
-      // Get initial location
-      const initialLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation
+      await Location.enableNetworkProviderAsync();
+      await Location.hasServicesEnabledAsync();
+      
+      // Intent: Reduce users waiting for map init before GPS is fully ready.
+      // Get quick initial location with balanced accuracy
+      const quickLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
       });
 
-      const newLocation: UserLocation = {
-        latitude: initialLocation.coords.latitude,
-        longitude: initialLocation.coords.longitude,
-        accuracy: initialLocation.coords.accuracy || 0,
-      };
+      if (quickLocation) {
+        handleLocationUpdate(quickLocation);
+        centerMapOnLocation(quickLocation.coords.latitude, quickLocation.coords.longitude);
+      }
       
-      setUserLocation(newLocation);
-      centerMapOnLocation(newLocation.latitude, newLocation.longitude);
-
-      // Start watching location
+      // iOS-specific background updates to maintain better GPS accuracy
+      // Cost is battery power consumption
+      // TODO: increase interval when app is in background to save battery
+      if (Platform.OS === 'ios') {
+        const { status } = await Location.requestBackgroundPermissionsAsync();
+        if (status === 'granted') {
+          await Location.startLocationUpdatesAsync('golf-gps-location', {
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 500,
+            distanceInterval: 0.1,
+            activityType: Location.ActivityType.Fitness,
+            showsBackgroundLocationIndicator: true,
+          });
+        }
+      }
+      
+      // Start immediate high-accuracy updates
       const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000,
-          distanceInterval: 1
+          timeInterval: 500,
+          distanceInterval: 0.1,
+          mayShowUserSettingsDialog: true,
         },
-        (location) => {
-          const newLocation: UserLocation = {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            accuracy: location.coords.accuracy || 0,
-          };
-          
-          setUserLocation(newLocation);
-          
-          if (mapRef.current && !isTracking) {
-            centerMapOnLocation(newLocation.latitude, newLocation.longitude);
-          }
-        }
+        handleLocationUpdate
       );
 
       locationSubscription.current = subscription;
-      setIsTracking(true);
+
     } catch (error) {
-      console.log('Error starting location tracking:', error);
-      Alert.alert('Location Error', 'Unable to get your location. Please check your GPS settings.');
-    }
-  };
-
-  // Record golf shot at current location
-  const recordShot = () => {
-    if (!userLocation) {
-      Alert.alert('No Location', 'Please wait for GPS to acquire your location.');
-      return;
-    }
-
-    if (userLocation.accuracy > 20) {
+      console.log('Location tracking error:', error);
       Alert.alert(
-        'Poor GPS Accuracy', 
-        `GPS accuracy is ${Math.round(userLocation.accuracy)}m. Wait for better signal?`,
-        [
-          {text: 'Wait', style: 'cancel'},
-          {text: 'Record Anyway', onPress: () => createShot()}
-        ]
+        'Error',
+        'Failed to start location tracking. Please check your device settings.'
       );
+    }
+  };
+
+  // Record golf shot at the center of the map view because GPS might not be accurate.
+  // User adjust the location with the GPS pin for location reference.
+  // TODO: add component to calculate center of the map view to last shot.
+  const recordShot = async () => {
+    if (!mapRef.current) {
+      Alert.alert('Error', 'Map is not ready');
       return;
     }
 
-    createShot();
+    try {
+      const camera = await mapRef.current.getCamera();
+      const mapCenterLocation: UserLocation = {
+        latitude: camera.center.latitude,
+        longitude: camera.center.longitude,
+        accuracy: 1, // Using 1m accuracy since this is a manual placement
+      };
+
+      setPendingShot(mapCenterLocation);
+      setShowClubSelector(true);
+    } catch (error) {
+      console.log('Error getting map center:', error);
+      Alert.alert(
+        'Error',
+        'Could not record shot at map center. Please try again.'
+      );
+    }
   };
 
-  const createShot = () => {
-    if (!userLocation) return;
+  const handleClubSelect = (club: string) => {
+    if (pendingShot) {
+      createShot(pendingShot, club);
+      setPendingShot(null);
+    }
+    setShowClubSelector(false);
+  };
 
+  // Save shots to AsyncStorage
+  const saveShots = async (newShots: GolfShot[]) => {
+    try {
+      const shotsData = newShots.map(shot => ({
+        ...shot,
+        timestamp: shot.timestamp.toISOString(), // Convert Date to string for storage
+      }));
+      await AsyncStorage.setItem('golfShots', JSON.stringify(shotsData));
+    } catch (error) {
+      console.log('Error saving shots:', error);
+    }
+  };
+
+  // Load shots from AsyncStorage
+  const loadShots = async () => {
+    try {
+      const savedShots = await AsyncStorage.getItem('golfShots');
+      if (savedShots) {
+        const parsedShots = JSON.parse(savedShots);
+        // Convert string timestamps back to Date objects
+        const shotsWithDates = parsedShots.map((shot: any) => ({
+          ...shot,
+          timestamp: new Date(shot.timestamp),
+        }));
+        setShots(shotsWithDates);
+      }
+    } catch (error) {
+      console.log('Error loading shots:', error);
+    }
+  };
+
+  const createShot = (location: UserLocation, club: string) => {
     const newShot: GolfShot = {
       id: Date.now().toString(),
       coordinate: {
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
+        latitude: location.latitude,
+        longitude: location.longitude,
       },
       timestamp: new Date(),
       shotNumber: shots.length + 1,
-      accuracy: userLocation.accuracy,
+      holeNumber: currentHole,
+      club,
     };
 
-    setShots(prevShots => [...prevShots, newShot]);
+    const updatedShots = [...shots, newShot];
+    setShots(updatedShots);
+    saveShots(updatedShots);
+    centerMapOnLocation(location.latitude, location.longitude);
+  };
 
-    Alert.alert(
-      'Shot Recorded!', 
-      `Shot #${newShot.shotNumber} recorded with ${Math.round(newShot.accuracy * 1.09361)}yrds accuracy.`
-    );
+  const deleteShot = async (shotId: string) => {
+    const updatedShots = shots.filter(shot => shot.id !== shotId);
+    setShots(updatedShots);
+    try {
+      await AsyncStorage.setItem('shots', JSON.stringify(updatedShots));
+    } catch (error) {
+      console.error('Error saving updated shots:', error);
+    }
   };
 
   // Calculate distance between shots
@@ -177,18 +333,6 @@ const MapScreen: React.FC = () => {
     return R * c; // Distance in meters
   };
 
-  // Clear all shots
-  const clearShots = () => {
-    Alert.alert(
-      'Clear All Shots',
-      'Are you sure you want to clear all recorded shots?',
-      [
-        {text: 'Cancel', style: 'cancel'},
-        {text: 'Clear', style: 'destructive', onPress: () => setShots([])}
-      ]
-    );
-  };
-
   // Get polyline coordinates for shot path
   const getPolylineCoordinates = () => {
     return shots.map(shot => shot.coordinate);
@@ -199,28 +343,28 @@ const MapScreen: React.FC = () => {
     if (shots.length < 2) return '';
     
     const lastShot = shots[shots.length - 1];
-    const previousShot = shots[shots.length - 2];
+    // Filter shots to only include shots from the current hole
+    const currentHoleShots = shots.filter(shot => shot.holeNumber === lastShot.holeNumber);
+    
+    if (currentHoleShots.length < 2) return ''; // First shot on the hole
+    
+    const previousShot = currentHoleShots[currentHoleShots.length - 2];
     const distance = calculateDistance(previousShot, lastShot);
     
     return `${Math.round(distance * 1.09361)} yards`; // Convert meters to yards
   };
 
   useEffect(() => {
-    requestLocationPermission();
-
-    return () => {
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-      }
+    const initializeApp = async () => {
+      await loadShots();
+      await loadLastLocation();
+      requestLocationPermission();
     };
-  }, []);
 
-  const initialRegion = {
-    latitude: 33.66745,
-    longitude: -117.9298,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  };
+    initializeApp();
+
+    return cleanupLocationServices;
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -229,91 +373,57 @@ const MapScreen: React.FC = () => {
         style={styles.map}
         provider="google"
         mapType="satellite"
+        initialRegion={initialRegion}
         showsUserLocation={true}
         followsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={true}
         showsScale={true}
+        onUserLocationChange={handleMapLocationChange}
       >
-        {/* Shot markers */}
         {shots.map((shot, index) => (
-          <Marker
+          <ShotMarker
             key={shot.id}
-            coordinate={shot.coordinate}
-            title={`Shot ${shot.shotNumber}`}
-            description={`Accuracy: ${Math.round(shot.accuracy)}m${
-              index > 0 ? ` | Distance: ${Math.round(
-                calculateDistance(shots[index - 1], shot) * 1.09361
-              )} yards` : ''
-            }`}
-            pinColor={index === 0 ? 'green' : index === shots.length - 1 ? 'red' : 'orange'}
+            shot={shot}
+            index={index}
+            nextShot={index < shots.length - 1 ? shots[index + 1] : undefined}
+            totalShots={shots.length}
+            calculateDistance={calculateDistance}
           />
         ))}
 
-        {/* Shot path polyline */}
-        {shots.length > 1 && (
-          <Polyline
-            coordinates={getPolylineCoordinates()}
-            strokeColor="#FF0000"
-            strokeWidth={3}
-            lineDashPattern={[5, 10]}
-          />
-        )}
+        <ShotPath coordinates={getPolylineCoordinates()} />
       </MapView>
 
-      {/* Control buttons overlay */}
-      <View style={styles.controlsContainer}>
-        {/* GPS Status */}
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusText}>
-            GPS: {userLocation ? `${Math.round(userLocation.accuracy)}m (${Math.round(userLocation.accuracy * 1.09361)}yrds)` : 'Searching...'}
-          </Text>
-          <Text style={styles.statusText}>
-            Shots: {shots.length}
-          </Text>
-          {getLastShotDistance() && (
-            <Text style={styles.distanceText}>
-              Last: {getLastShotDistance()}
-            </Text>
-          )}
-        </View>
+      <HoleSelector
+        currentHole={currentHole}
+        onHoleChange={setCurrentHole}
+        currentShot={shots.length + 1}
+      />
 
-        {/* Main record button */}
-        <TouchableOpacity
-          style={[
-            styles.recordButton,
-            !userLocation && styles.recordButtonDisabled
-          ]}
-          onPress={recordShot}
-          disabled={!userLocation}
-        >
-          <Text style={styles.recordButtonText}>
-            RECORD SHOT
-          </Text>
-        </TouchableOpacity>
+      <MapControls
+        onRecordShot={recordShot}
+        onCenter={() => {
+          const location = getBestLocation();
+          if (location) {
+            centerMapOnLocation(location.latitude, location.longitude);
+          }
+        }}
+        isRecordEnabled={true}
+        isCenterEnabled={!!getBestLocation()}
+        lastShotDistance={getLastShotDistance()}
+        accuracy={userLocation?.accuracy ?? initialMapLocation?.accuracy ?? null}
+        isAcquiring={!!initialMapLocation && (!userLocation || userLocation.accuracy > 10)}
+      />
 
-        {/* Secondary buttons */}
-        <View style={styles.secondaryButtons}>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => {
-              if (userLocation) {
-                centerMapOnLocation(userLocation.latitude, userLocation.longitude);
-              }
-            }}
-          >
-            <Text style={styles.secondaryButtonText}>Center</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.secondaryButton, shots.length === 0 && styles.secondaryButtonDisabled]}
-            onPress={clearShots}
-            disabled={shots.length === 0}
-          >
-            <Text style={styles.secondaryButtonText}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <ClubSelector
+        visible={showClubSelector}
+        onSelectClub={handleClubSelect}
+        onCancel={() => {
+          setPendingShot(null);
+          setShowClubSelector(false);
+        }}
+      />
     </View>
   );
 };
@@ -321,91 +431,11 @@ const MapScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000',
   },
   map: {
-    flex: 1,
-  },
-  controlsContainer: {
-    position: 'absolute',
-    bottom: 100,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-  },
-  statusContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 15,
-    alignItems: 'center',
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  distanceText: {
-    color: '#4CAF50',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 5,
-  },
-  recordButton: {
-    backgroundColor: 'rgba(255, 107, 53, 0.5)',
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 25,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backdropFilter: 'blur(10px)',
-  },
-  recordButtonDisabled: {
-    backgroundColor: 'rgba(204, 204, 204, 0.3)',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  recordButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 2,
-  },
-  secondaryButtons: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  secondaryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  secondaryButtonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  secondaryButtonText: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: '600',
-    textShadowColor: 'rgba(255, 255, 255, 0.5)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 1,
+    width: '100%',
+    height: '100%',
   },
 });
 

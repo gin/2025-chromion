@@ -14,9 +14,16 @@ export default {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY,
       },
       infoPlist: {
-        NSLocationWhenInUseUsageDescription: "This app needs access to location when open to track your golf shots.",
-        NSLocationAlwaysUsageDescription: "This app needs access to location when in the background to track your golf shots.",
-        UIBackgroundModes: ["location"],
+        NSLocationWhenInUseUsageDescription: "This app needs access to location when open to track your golf shots with high precision.",
+        NSLocationAlwaysUsageDescription: "This app needs access to location when in the background for continuous shot tracking.",
+        NSLocationAlwaysAndWhenInUseUsageDescription: "For the most accurate shot tracking, please allow location access at all times.",
+        NSLocationAccuracyUsageDescription: "This app requires high accuracy location data to precisely track your golf shots.",
+        NSLocationTemporaryUsageDescriptionDictionary: {
+          "GPSTracking": "This app requires high-precision GPS data to accurately measure golf shot distances"
+        },
+        UIBackgroundModes: ["location", "fetch"],
+        UIRequiredDeviceCapabilities: ["gps", "location-services"],
+        NSLocationUsageDescription: "This app uses your location to track golf shots and calculate distances.",
       },
       bundleIdentifier: "com.anonymous.golf-gps",
     },
