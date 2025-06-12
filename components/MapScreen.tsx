@@ -16,6 +16,8 @@ import HoleSelector from './HoleSelector';
 import ClubSelector from './ClubSelector';
 import ShotMarker from './ShotMarker';
 import ShotPath from './ShotPath';
+import ClearDataButton from './ClearDataButton';
+import CenterDot from './CenterDot';
 
 interface GolfShot {
   id: string;
@@ -29,6 +31,11 @@ interface GolfShot {
   club: string | null; // option for when adding feature to speed up putts
 }
 
+interface Coordinate {
+  latitude: number;
+  longitude: number;
+}
+
 interface UserLocation {
   latitude: number;
   longitude: number;
@@ -38,6 +45,7 @@ interface UserLocation {
 const MapScreen: React.FC = () => {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [currentHole, setCurrentHole] = useState(1);
+  const [mapCenter, setMapCenter] = useState<Coordinate | null>(null);
   const [initialRegion, setInitialRegion] = useState({
     latitude: 33.66745,
     longitude: -117.9298,
@@ -49,28 +57,39 @@ const MapScreen: React.FC = () => {
   const [initialMapLocation, setInitialMapLocation] = useState<UserLocation | null>(null);
   const [showClubSelector, setShowClubSelector] = useState(false);
   const [pendingShot, setPendingShot] = useState<UserLocation | null>(null);
+  const [selectedShot, setSelectedShot] = useState<string | null>(null);
   const mapRef = useRef<MapView>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+
+  const handleClearData = async () => {
+    setShots([]);
+    setCurrentHole(1);
+    try {
+      await AsyncStorage.multiRemove(['golfShots', 'lastKnownLocation']);
+    } catch (error) {
+      console.error('Error clearing data:', error);
+    }
+  };
 
   // Request foreground (during active use) and background (during lock screen, etc) location permissions
   const requestLocationPermission = async () => {
     try {
       const foreground = await Location.requestForegroundPermissionsAsync();
-      if (foreground.status !== 'granted') {
-        Alert.alert(
-          'Permission Denied',
-          'Location permission is required to track your golf shots.'
-        );
-        return;
-      }
+      // if (foreground.status !== 'granted') {
+      //   Alert.alert(
+      //     'Permission Denied',
+      //     'Location permission is required to track your golf shots.'
+      //   );
+      //   return;
+      // }
 
       const background = await Location.requestBackgroundPermissionsAsync();
-      if (background.status !== 'granted') {
-        Alert.alert(
-          'Background Permission Denied',
-          'Background location permission is recommended for GPS responsiveness.'
-        );
-      }
+      // if (background.status !== 'granted') {
+      //   Alert.alert(
+      //     'Background Permission Denied',
+      //     'Background location permission is recommended for GPS responsiveness.'
+      //   );
+      // }
 
       setHasLocationPermission(true);
       startLocationTracking();
@@ -289,6 +308,7 @@ const MapScreen: React.FC = () => {
   };
 
   const createShot = (location: UserLocation, club: string) => {
+    const currentHoleShots = shots.filter(shot => shot.holeNumber === currentHole);
     const newShot: GolfShot = {
       id: Date.now().toString(),
       coordinate: {
@@ -296,7 +316,7 @@ const MapScreen: React.FC = () => {
         longitude: location.longitude,
       },
       timestamp: new Date(),
-      shotNumber: shots.length + 1,
+      shotNumber: currentHoleShots.length + 1,  // Shot number for this specific hole
       holeNumber: currentHole,
       club,
     };
@@ -317,13 +337,21 @@ const MapScreen: React.FC = () => {
     }
   };
 
-  // Calculate distance between shots
-  const calculateDistance = (shot1: GolfShot, shot2: GolfShot): number => {
+  // Calculate distance between coordinates
+  const calculateDistance = (coord1: Coordinate | GolfShot, coord2: Coordinate | GolfShot): number => {
+    const getCoord = (point: Coordinate | GolfShot): Coordinate => {
+      if ('coordinate' in point) return point.coordinate;
+      return point;
+    };
+
+    const point1 = getCoord(coord1);
+    const point2 = getCoord(coord2);
+
     const R = 6371e3; // Earth's radius in meters
-    const φ1 = (shot1.coordinate.latitude * Math.PI) / 180;
-    const φ2 = (shot2.coordinate.latitude * Math.PI) / 180;
-    const Δφ = ((shot2.coordinate.latitude - shot1.coordinate.latitude) * Math.PI) / 180;
-    const Δλ = ((shot2.coordinate.longitude - shot1.coordinate.longitude) * Math.PI) / 180;
+    const φ1 = (point1.latitude * Math.PI) / 180;
+    const φ2 = (point2.latitude * Math.PI) / 180;
+    const Δφ = ((point2.latitude - point1.latitude) * Math.PI) / 180;
+    const Δλ = ((point2.longitude - point1.longitude) * Math.PI) / 180;
 
     const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
               Math.cos(φ1) * Math.cos(φ2) *
@@ -333,9 +361,20 @@ const MapScreen: React.FC = () => {
     return R * c; // Distance in meters
   };
 
-  // Get polyline coordinates for shot path
-  const getPolylineCoordinates = () => {
-    return shots.map(shot => shot.coordinate);
+  // Calculate distance between coordinates (for CenterDot)
+  const calculateCoordinateDistance = (coord1: Coordinate, coord2: Coordinate): number => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = (coord1.latitude * Math.PI) / 180;
+    const φ2 = (coord2.latitude * Math.PI) / 180;
+    const Δφ = ((coord2.latitude - coord1.latitude) * Math.PI) / 180;
+    const Δλ = ((coord2.longitude - coord1.longitude) * Math.PI) / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
   };
 
   // Get last shot distance
@@ -352,6 +391,32 @@ const MapScreen: React.FC = () => {
     const distance = calculateDistance(previousShot, lastShot);
     
     return `${Math.round(distance * 1.09361)} yards`; // Convert meters to yards
+  };
+
+  const handleMapCameraChange = async () => {
+    if (!mapRef.current) return;
+    try {
+      const camera = await mapRef.current.getCamera();
+      setMapCenter({
+        latitude: camera.center.latitude,
+        longitude: camera.center.longitude,
+      });
+    } catch (error) {
+      console.log('Error getting map center:', error);
+    }
+  };
+
+  const handleMarkerPress = (shotId: string) => {
+    setSelectedShot(shotId);
+  };
+
+  const handleMarkerDeselect = () => {
+    setSelectedShot(null);
+  };
+
+  const getLastShot = () => {
+    if (shots.length === 0) return null;
+    return shots[shots.length - 1];
   };
 
   useEffect(() => {
@@ -380,6 +445,7 @@ const MapScreen: React.FC = () => {
         showsCompass={true}
         showsScale={true}
         onUserLocationChange={handleMapLocationChange}
+        onRegionChangeComplete={handleMapCameraChange}
       >
         {shots.map((shot, index) => (
           <ShotMarker
@@ -389,16 +455,30 @@ const MapScreen: React.FC = () => {
             nextShot={index < shots.length - 1 ? shots[index + 1] : undefined}
             totalShots={shots.length}
             calculateDistance={calculateDistance}
+            onDeleteShot={deleteShot}
+            onPress={() => handleMarkerPress(shot.id)}
+            onCalloutPress={handleMarkerDeselect}
           />
         ))}
 
-        <ShotPath coordinates={getPolylineCoordinates()} />
+        <ShotPath coordinates={shots.map(shot => shot.coordinate)} shots={shots} />
       </MapView>
+
+      {mapCenter && !selectedShot && (
+        <CenterDot
+          centerCoordinate={mapCenter}
+          lastShotCoordinate={getLastShot()?.coordinate}
+          gpsCoordinate={userLocation}
+          calculateDistance={calculateCoordinateDistance}
+        />
+      )}
+
+      <ClearDataButton onClear={handleClearData} />
 
       <HoleSelector
         currentHole={currentHole}
         onHoleChange={setCurrentHole}
-        currentShot={shots.length + 1}
+        currentShot={shots.filter(shot => shot.holeNumber === currentHole).length}
       />
 
       <MapControls

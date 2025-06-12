@@ -19,6 +19,10 @@ interface ShotMarkerProps {
   nextShot?: GolfShot;
   totalShots: number;
   calculateDistance: (shot1: GolfShot, shot2: GolfShot) => number;
+  onDeleteShot?: (shotId: string) => void;
+  onPress?: () => void;
+  onCalloutPress?: () => void;
+  isSelected?: boolean;
 }
 
 const ShotMarker: React.FC<ShotMarkerProps> = ({
@@ -27,10 +31,22 @@ const ShotMarker: React.FC<ShotMarkerProps> = ({
   nextShot,
   totalShots,
   calculateDistance,
+  onDeleteShot,
+  onPress,
+  onCalloutPress,
+  isSelected = false,
 }) => {
   const showDistance = nextShot && nextShot.holeNumber === shot.holeNumber;
   const isFirstShotOfHole = shot.shotNumber === 1;
   const isLastShotOfRound = index === totalShots - 1;
+
+  const handlePress = () => {
+    onPress?.();
+  };
+
+  const handleCalloutPress = () => {
+    onCalloutPress?.();
+  };
 
   return (
     <Marker
@@ -43,6 +59,9 @@ const ShotMarker: React.FC<ShotMarkerProps> = ({
         )} yards` : ''
       }`}
       pinColor={isFirstShotOfHole ? 'green' : isLastShotOfRound ? 'red' : 'orange'}
+      onPress={handlePress}
+      onCalloutPress={handleCalloutPress}
+      onDeselect={handleCalloutPress}
     />
   );
 };
