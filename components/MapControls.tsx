@@ -45,6 +45,7 @@ const MapControls: React.FC<MapControlsProps> = ({
           <Text style={styles.centerButtonText}>🌎</Text>
         </TouchableOpacity>
 
+
         {/* Record button */}
         <TouchableOpacity
           style={[
@@ -60,6 +61,7 @@ const MapControls: React.FC<MapControlsProps> = ({
         </TouchableOpacity>
 
 
+        {/* GPS Quality Indicator */}
         <GPSQualityIndicator
           accuracy={accuracy}
           isAcquiring={isAcquiring}

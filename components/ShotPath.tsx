@@ -1,17 +1,7 @@
 import React from 'react';
 import { Polyline } from 'react-native-maps';
-
-interface Coordinate {
-  latitude: number;
-  longitude: number;
-}
-
-interface GolfShot {
-  id: string;
-  coordinate: Coordinate;
-  holeNumber: number;
-  // Other properties not needed
-}
+import { Coordinate } from '@/types/geo.types';
+import { GolfShot } from '@/models/GolfShot';
 
 interface ShotPathProps {
   coordinates: Coordinate[];

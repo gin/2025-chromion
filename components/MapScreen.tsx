@@ -18,29 +18,9 @@ import ShotMarker from './ShotMarker';
 import ShotPath from './ShotPath';
 import ClearDataButton from './ClearDataButton';
 import CenterDot from './CenterDot';
-
-interface GolfShot {
-  id: string;
-  coordinate: {
-    latitude: number;
-    longitude: number;
-  };
-  timestamp: Date;
-  shotNumber: number;
-  holeNumber: number;
-  club: string | null; // option for when adding feature to speed up putts
-}
-
-interface Coordinate {
-  latitude: number;
-  longitude: number;
-}
-
-interface UserLocation {
-  latitude: number;
-  longitude: number;
-  accuracy: number;
-}
+import { calculateDistance } from '@/utils/geo';
+import { Coordinate, UserLocation } from '@/types/geo.types';
+import { GolfShot } from '@/models/GolfShot';
 
 const MapScreen: React.FC = () => {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -337,46 +317,6 @@ const MapScreen: React.FC = () => {
     }
   };
 
-  // Calculate distance between coordinates
-  const calculateDistance = (coord1: Coordinate | GolfShot, coord2: Coordinate | GolfShot): number => {
-    const getCoord = (point: Coordinate | GolfShot): Coordinate => {
-      if ('coordinate' in point) return point.coordinate;
-      return point;
-    };
-
-    const point1 = getCoord(coord1);
-    const point2 = getCoord(coord2);
-
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = (point1.latitude * Math.PI) / 180;
-    const φ2 = (point2.latitude * Math.PI) / 180;
-    const Δφ = ((point2.latitude - point1.latitude) * Math.PI) / 180;
-    const Δλ = ((point2.longitude - point1.longitude) * Math.PI) / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
-  };
-
-  // Calculate distance between coordinates (for CenterDot)
-  const calculateCoordinateDistance = (coord1: Coordinate, coord2: Coordinate): number => {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = (coord1.latitude * Math.PI) / 180;
-    const φ2 = (coord2.latitude * Math.PI) / 180;
-    const Δφ = ((coord2.latitude - coord1.latitude) * Math.PI) / 180;
-    const Δλ = ((coord2.longitude - coord1.longitude) * Math.PI) / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
-  };
-
   // Get last shot distance
   const getLastShotDistance = (): string => {
     if (shots.length < 2) return '';
@@ -388,7 +328,7 @@ const MapScreen: React.FC = () => {
     if (currentHoleShots.length < 2) return ''; // First shot on the hole
     
     const previousShot = currentHoleShots[currentHoleShots.length - 2];
-    const distance = calculateDistance(previousShot, lastShot);
+    const distance = calculateDistance(previousShot.coordinate, lastShot.coordinate);
     
     return `${Math.round(distance * 1.09361)} yards`; // Convert meters to yards
   };
@@ -407,11 +347,8 @@ const MapScreen: React.FC = () => {
   };
 
   const handleMarkerPress = (shotId: string) => {
-    setSelectedShot(shotId);
-  };
-
-  const handleMarkerDeselect = () => {
-    setSelectedShot(null);
+    // Toggle selection: if same marker is tapped again, deselect it
+    setSelectedShot(current => current === shotId ? null : shotId);
   };
 
   const getLastShot = () => {
@@ -454,10 +391,8 @@ const MapScreen: React.FC = () => {
             index={index}
             nextShot={index < shots.length - 1 ? shots[index + 1] : undefined}
             totalShots={shots.length}
-            calculateDistance={calculateDistance}
             onDeleteShot={deleteShot}
             onPress={() => handleMarkerPress(shot.id)}
-            onCalloutPress={handleMarkerDeselect}
           />
         ))}
 
@@ -469,7 +404,7 @@ const MapScreen: React.FC = () => {
           centerCoordinate={mapCenter}
           lastShotCoordinate={getLastShot()?.coordinate}
           gpsCoordinate={userLocation}
-          calculateDistance={calculateCoordinateDistance}
+          calculateDistance={calculateDistance}
         />
       )}
 

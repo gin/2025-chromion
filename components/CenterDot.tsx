@@ -1,10 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-
-interface Coordinate {
-  latitude: number;
-  longitude: number;
-}
+import { Coordinate } from '@/types/geo.types';
 
 interface CenterDotProps {
   lastShotCoordinate?: Coordinate | null;
