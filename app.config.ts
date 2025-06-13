@@ -1,5 +1,7 @@
-export default {
-  expo: {
+import { ExpoConfig, ConfigContext } from 'expo/config';
+
+export default ({ config }: ConfigContext): ExpoConfig => ({
+  ...config,
     name: "golf-gps",
     slug: "golf-gps",
     version: "0.0.1",
@@ -11,17 +13,17 @@ export default {
     ios: {
       supportsTablet: true,
       config: {
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY,
+        googleMapsApiKey: process.env.EXPO_PUBLIC_Maps_KEY,
       },
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "This app needs access to location when open to track your golf shots with high precision.",
-        NSLocationAlwaysUsageDescription: "This app needs access to location when in the background for continuous shot tracking.",
-        NSLocationAlwaysAndWhenInUseUsageDescription: "For the most accurate shot tracking, please allow location access at all times.",
-        NSLocationAccuracyUsageDescription: "This app requires high accuracy location data to precisely track your golf shots.",
-        NSLocationTemporaryUsageDescriptionDictionary: {
-          "GPSTracking": "This app requires high-precision GPS data to accurately measure golf shot distances"
-        },
-        UIBackgroundModes: ["location", "fetch"],
+        // NSLocationAlwaysUsageDescription: "This app needs access to location when in the background for continuous shot tracking.",
+        // NSLocationAlwaysAndWhenInUseUsageDescription: "For the most accurate shot tracking, please allow location access at all times.",
+        // NSLocationAccuracyUsageDescription: "This app requires high accuracy location data to precisely track your golf shots.",
+        // NSLocationTemporaryUsageDescriptionDictionary: {
+        //   "GPSTracking": "This app requires high-precision GPS data to accurately measure golf shot distances"
+        // },
+        // UIBackgroundModes: ["location", "fetch"],
         UIRequiredDeviceCapabilities: ["gps", "location-services"],
         NSLocationUsageDescription: "This app uses your location to track golf shots and calculate distances.",
       },
@@ -39,7 +41,7 @@ export default {
       ],
       config: {
         googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY,
+          apiKey: process.env.EXPO_PUBLIC_Maps_KEY,
         },
       },
     },
@@ -50,13 +52,14 @@ export default {
     },
     plugins: [
       "expo-router",
-      [
-        "expo-location",
-        {
-          locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to track your golf shots.",
-          locationAlwaysPermission: "Allow $(PRODUCT_NAME) to use your location to track your golf shots.",
-        },
-      ],
+      "expo-location",
+      // [
+      //   "expo-location",
+      //   {
+      //     locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to track your golf shots.",
+      //     locationAlwaysPermission: "Allow $(PRODUCT_NAME) to use your location to track your golf shots.",
+      //   },
+      // ],
       [
         "expo-splash-screen",
         {
@@ -70,5 +73,5 @@ export default {
     experiments: {
       typedRoutes: true,
     },
-  },
-};
+  }
+);
