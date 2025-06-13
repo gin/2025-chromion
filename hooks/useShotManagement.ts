@@ -1,0 +1,73 @@
+import { useState, useEffect } from 'react';
+import { GolfShot } from '@/models/GolfShot';
+import { UserLocation } from '@/types/geo.types';
+import { loadShotsFromStorage, saveShotsToStorage, clearAllData } from '@/services/storageService';
+import { calculateDistance } from '@/utils/geo';
+
+export const useShotManagement = () => {
+  const [shots, setShots] = useState<GolfShot[]>([]);
+  const [currentHole, setCurrentHole] = useState(1);
+
+  // Load shots from storage on initial mount
+  useEffect(() => {
+    const loadData = async () => {
+      const loadedShots = await loadShotsFromStorage();
+      setShots(loadedShots);
+      // TODO: load the last hole number here if stored? (check to see if needed since calc on mount)
+    };
+    loadData();
+  }, []);
+
+  const createShot = (location: UserLocation, club: string) => {
+    const currentHoleShots = shots.filter(shot => shot.holeNumber === currentHole);
+    const newShot: GolfShot = {
+      id: Date.now().toString(),
+      coordinate: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+      },
+      timestamp: new Date(),
+      shotNumber: currentHoleShots.length + 1,
+      holeNumber: currentHole,
+      club,
+    };
+
+    const updatedShots = [...shots, newShot];
+    setShots(updatedShots);
+    saveShotsToStorage(updatedShots);
+  };
+
+  const deleteShot = (shotId: string) => {
+    const updatedShots = shots.filter(shot => shot.id !== shotId);
+    setShots(updatedShots);
+    saveShotsToStorage(updatedShots);
+  };
+  
+  const clearShots = async () => {
+    setShots([]);
+    setCurrentHole(1);
+    await clearAllData();
+  };
+
+  const getLastShotDistance = (): string => {
+    const currentHoleShots = shots.filter(shot => shot.holeNumber === currentHole);
+    if (currentHoleShots.length < 2) return '';
+  
+    const lastShot = currentHoleShots[currentHoleShots.length - 1];
+    const previousShot = currentHoleShots[currentHoleShots.length - 2];
+    const distance = calculateDistance(previousShot.coordinate, lastShot.coordinate);
+    
+    return `${Math.round(distance * 1.09361)} yards`; // Convert meters to yards
+  };
+
+  return {
+    shots,
+    currentHole,
+    setCurrentHole,
+    createShot,
+    deleteShot,
+    clearShots,
+    getLastShotDistance,
+    getLastShot: () => shots[shots.length - 1] || null,
+  };
+};
