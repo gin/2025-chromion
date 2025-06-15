@@ -4,12 +4,11 @@ import { Coordinate } from '@/types/geo.types';
 import { GolfShot } from '@/models/GolfShot';
 
 interface ShotPathProps {
-  coordinates: Coordinate[];
   shots: GolfShot[];
 }
 
-const ShotPath: React.FC<ShotPathProps> = ({ coordinates, shots }) => {
-  if (coordinates.length < 2) return null;
+const ShotPath: React.FC<ShotPathProps> = ({ shots }) => {
+  if (shots.length < 2) return null;
 
   // Create path segments based on hole transitions
   const pathSegments: { coordinates: Coordinate[]; isDifferentHole: boolean }[] = [];

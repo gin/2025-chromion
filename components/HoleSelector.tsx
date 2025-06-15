@@ -1,18 +1,21 @@
 import React from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { GolfShot } from '@/models/GolfShot';
 import ShotCounter from './ShotCounter';
 
 interface HoleSelectorProps {
   currentHole: number;
   onHoleChange: (hole: number) => void;
-  currentShot: number;
+  shots: GolfShot[];
 }
 
 const HoleSelector: React.FC<HoleSelectorProps> = ({
   currentHole,
   onHoleChange,
-  currentShot,
+  shots,
 }) => {
+  const currentShot = shots.filter(shot => shot.holeNumber === currentHole).length;
+  
   return (
     <View style={styles.container}>
       <ScrollView

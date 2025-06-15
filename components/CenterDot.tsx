@@ -1,21 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Coordinate } from '@/types/geo.types';
+import { calculateDistance } from '@/utils/geo';
 
 interface CenterDotProps {
   lastShotCoordinate?: Coordinate | null;
   gpsCoordinate?: Coordinate | null;
   centerCoordinate: Coordinate;
-  calculateDistance: (coord1: Coordinate, coord2: Coordinate) => number;
-  renderPolyline?: (coords: Coordinate[]) => React.ReactNode;  // New prop for rendering polyline
 }
 
 const CenterDot: React.FC<CenterDotProps> = ({
   lastShotCoordinate,
   gpsCoordinate,
   centerCoordinate,
-  calculateDistance,
-  renderPolyline,
 }) => {
   const getDistance = () => {
     if (!centerCoordinate) return null;
@@ -33,31 +30,17 @@ const CenterDot: React.FC<CenterDotProps> = ({
     return null;
   };
 
-  const getLineCoordinates = () => {
-    if (lastShotCoordinate) {
-      return [centerCoordinate, lastShotCoordinate];
-    }
-    if (gpsCoordinate) {
-      return [centerCoordinate, gpsCoordinate];
-    }
-    return [];
-  };
-
   const distance = getDistance();
-  const lineCoordinates = getLineCoordinates();
 
   return (
-    <>
-      {renderPolyline && lineCoordinates.length > 0 && renderPolyline(lineCoordinates)}
-      <View style={styles.container}>
-        {distance && (
-          <View style={styles.distanceContainer}>
-            <Text style={styles.distanceText}>{distance}</Text>
-          </View>
-        )}
-        <View style={styles.dot} />
-      </View>
-    </>
+    <View style={styles.container}>
+      {distance && (
+        <View style={styles.distanceContainer}>
+          <Text style={styles.distanceText}>{distance}</Text>
+        </View>
+      )}
+      <View style={styles.dot} />
+    </View>
   );
 };
 
