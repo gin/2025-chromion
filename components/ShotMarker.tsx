@@ -8,6 +8,7 @@ interface ShotMarkerProps {
   nextShotCoordinate?: { latitude: number; longitude: number };
   onPress?: () => void;
   onCalloutPress?: () => void;
+  onDeselect?: () => void;
 }
 
 const ShotMarker: React.FC<ShotMarkerProps> = ({
@@ -15,6 +16,7 @@ const ShotMarker: React.FC<ShotMarkerProps> = ({
   nextShotCoordinate,
   onPress,
   onCalloutPress,
+  onDeselect,
 }) => {
   const showDistance = !!nextShotCoordinate;
   const isFirstShotOfHole = shot.shotNumber === 1;
@@ -25,6 +27,10 @@ const ShotMarker: React.FC<ShotMarkerProps> = ({
 
   const handleCalloutPress = () => {
     onCalloutPress?.();
+  };
+
+  const handleDeselect = () => {
+    onDeselect?.();
   };
 
   return (
@@ -40,9 +46,11 @@ const ShotMarker: React.FC<ShotMarkerProps> = ({
       pinColor={isFirstShotOfHole ? 'green' : 'orange'}
       onPress={handlePress}
       onCalloutPress={handleCalloutPress}
-      onDeselect={handleCalloutPress}
+      onDeselect={handleDeselect}
     />
   );
 };
+
+// TODO: (UI) Change from callout to popover overlay or something more "glass"
 
 export default ShotMarker;

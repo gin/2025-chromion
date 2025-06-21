@@ -39,6 +39,8 @@ const MapScreen: React.FC = () => {
   const [showClubSelector, setShowClubSelector] = useState(false);
   const [pendingShot, setPendingShot] = useState<Coordinate | null>(null);
   const [selectedShot, setSelectedShot] = useState<string | null>(null);
+  const [isCalloutVisible, setIsCalloutVisible] = useState(false);
+  const [dotToggle, setDotToggle] = useState(true);
   
   const mapRef = useRef<MapView>(null);
 
@@ -94,14 +96,31 @@ const MapScreen: React.FC = () => {
   };
 
   const handleMarkerPress = (shotId: string) => {
-    setSelectedShot(current => (current === shotId ? null : shotId));
+    setSelectedShot(shotId);
+    setIsCalloutVisible(true);
+  };
+
+  const handleMarkerDeselect = () => {
+    setSelectedShot(null);
+    setIsCalloutVisible(false);
+  };
+
+  const handleMapPress = () => {
+    // When user taps the map, deselect any selected marker and hide callout
+    setSelectedShot(null);
+    setIsCalloutVisible(false);
   };
   
   const handleCenterMap = () => {
-      if (userLocation) {
-        centerMapOnLocation(userLocation.latitude, userLocation.longitude);
-      }
+    if (userLocation) {
+      centerMapOnLocation(userLocation.latitude, userLocation.longitude);
+    }
   };
+  
+  const handleDotToggle = () => {
+    if (dotToggle) setDotToggle(false);
+    if (!dotToggle) setDotToggle(true);
+  }
 
   return (
     <View style={styles.container}>
@@ -115,6 +134,7 @@ const MapScreen: React.FC = () => {
         showsCompass
         showsScale
         onRegionChangeComplete={async (region) => setMapCenter(region)}
+        onPress={handleMapPress}
       >
         {shots.map((shot) => {
           // Find next shot in the same hole for distance calculation
@@ -129,13 +149,14 @@ const MapScreen: React.FC = () => {
               shot={shot}
               nextShotCoordinate={nextShotInHole?.coordinate}
               onPress={() => handleMarkerPress(shot.id)}
+              onDeselect={handleMarkerDeselect}
             />
           );
         })}
         <ShotPath shots={shots} />
       </MapView>
 
-      {mapCenter && !selectedShot && (
+      { dotToggle && mapCenter && !isCalloutVisible && (
         <CenterDot
           centerCoordinate={mapCenter}
           lastShotCoordinate={getLastShot()?.coordinate}
@@ -168,17 +189,23 @@ const MapScreen: React.FC = () => {
           </View>
         )}
 
+        {/* GPS Quality Indicator */}
+        <GPSQualityIndicator
+          accuracy={userLocation?.accuracy ?? null}
+          isAcquiring={!userLocation || (userLocation.accuracy > 10)}
+        />
+
         <View style={styles.buttonContainer}>
-          {/* GPS Centering button */}
+          {/* Centering Map button */}
           <TouchableOpacity
             style={[
-              styles.centerButton,
-              !userLocation && styles.centerButtonDisabled
+              styles.centerMapButton,
+              !userLocation && styles.centerMapButtonDisabled
             ]}
             onPress={handleCenterMap}
             disabled={!userLocation}
           >
-            <Text style={styles.centerButtonText}>🌎</Text>
+            <Text style={styles.centerMapButtonText}>🌎</Text>
           </TouchableOpacity>
 
           {/* Record button */}
@@ -191,11 +218,13 @@ const MapScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
 
-          {/* GPS Quality Indicator */}
-          <GPSQualityIndicator
-            accuracy={userLocation?.accuracy ?? null}
-            isAcquiring={!userLocation || (userLocation.accuracy > 10)}
-          />
+          {/* Dot Toggle button */}
+          <TouchableOpacity
+            style={styles.dotToggleButton}
+            onPress={handleDotToggle}
+          >
+            <Text style={styles.dotToggleButtonText}>🤖</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -216,7 +245,7 @@ const styles = StyleSheet.create({
   map: { width: '100%', height: '100%' },
   controlsContainer: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 60,
     left: 20,
     right: 20,
     alignItems: 'center',
@@ -260,7 +289,7 @@ const styles = StyleSheet.create({
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 2,
   },
-  centerButton: {
+  centerMapButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
     width: 48,
     height: 48,
@@ -275,11 +304,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  centerButtonDisabled: {
+  centerMapButtonDisabled: {
     backgroundColor: 'rgba(255, 255, 255, 0.4)',
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  centerButtonText: {},
+  centerMapButtonText: {},
+  dotToggleButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dotToggleButtonText: {}
 });
 
 export default MapScreen;
