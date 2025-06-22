@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { StyleSheet, View, Modal, Text, TouchableOpacity, ScrollView } from 'react-native';
 
 interface ClubSelectorProps {
@@ -12,6 +12,26 @@ const CLUBS = [
 ];
 
 const ClubSelector: React.FC<ClubSelectorProps> = ({ visible, onSelectClub, onCancel }) => {
+  // Use ref to prevent rapid multiple club selections
+  const isProcessingRef = useRef(false);
+
+  // Reset processing flag when modal becomes visible
+  useEffect(() => {
+    if (visible) {
+      isProcessingRef.current = false;
+    }
+  }, [visible]);
+
+  const handleClubSelect = (club: string) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+    onSelectClub(club);
+    // Reset after a short delay
+    setTimeout(() => {
+      isProcessingRef.current = false;
+    }, 500);
+  };
+
   return (
     <Modal
       visible={visible}
@@ -27,7 +47,7 @@ const ClubSelector: React.FC<ClubSelectorProps> = ({ visible, onSelectClub, onCa
               <TouchableOpacity
                 key={club}
                 style={styles.clubButton}
-                onPress={() => onSelectClub(club)}
+                onPress={() => handleClubSelect(club)}
               >
                 <Text style={styles.clubButtonText}>{club}</Text>
               </TouchableOpacity>

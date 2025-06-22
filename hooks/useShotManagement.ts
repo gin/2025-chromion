@@ -34,13 +34,17 @@ export const useShotManagement = () => {
 
     const updatedShots = [...shots, newShot];
     setShots(updatedShots);
-    saveShotsToStorage(updatedShots);
+    saveShotsToStorage(updatedShots).catch(error => {
+      console.error('Error saving shots:', error);
+    });
   };
 
   const deleteShot = (shotId: string) => {
     const updatedShots = shots.filter(shot => shot.id !== shotId);
     setShots(updatedShots);
-    saveShotsToStorage(updatedShots);
+    saveShotsToStorage(updatedShots).catch(error => {
+      console.error('Error saving shots:', error);
+    });
   };
   
   const clearShots = async () => {
@@ -52,12 +56,19 @@ export const useShotManagement = () => {
   const getLastShotDistance = (): string => {
     const currentHoleShots = shots.filter(shot => shot.holeNumber === currentHole);
     if (currentHoleShots.length < 2) return '';
-  
+
     const lastShot = currentHoleShots[currentHoleShots.length - 1];
     const previousShot = currentHoleShots[currentHoleShots.length - 2];
     const distance = calculateDistance(previousShot.coordinate, lastShot.coordinate);
-    
+
     return `${Math.round(distance * 1.09361)} yards`; // Convert meters to yards
+  };
+
+  const updateShots = (updatedShots: GolfShot[]) => {
+    setShots(updatedShots);
+    saveShotsToStorage(updatedShots).catch(error => {
+      console.error('Error saving shots:', error);
+    });
   };
 
   return {
@@ -69,5 +80,6 @@ export const useShotManagement = () => {
     clearShots,
     getLastShotDistance,
     getLastShot: () => shots[shots.length - 1] || null,
+    updateShots,
   };
 };

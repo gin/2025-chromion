@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Alert, Text, TouchableOpacity } from 'react-native';
 import MapView from 'react-native-maps';
 import { loadLastLocationFromStorage } from '@/services/storageService';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { useShotManagement } from '@/hooks/useShotManagement';
 import { Coordinate } from '@/types/geo.types';
+import { GolfShot } from '@/models/GolfShot';
 
 import HoleSelector from './HoleSelector';
 import ClubSelector from './ClubSelector';
@@ -13,6 +14,7 @@ import ShotPath from './ShotPath';
 import ClearDataButton from './ClearDataButton';
 import CenterDot from './CenterDot';
 import GPSQualityIndicator from './GPSQualityIndicator';
+import ShotEditor from './ShotEditor';
 
 // A golf course for map to center on if user's phone has no GPS.
 const DEFAULT_INITIAL_REGION = {
@@ -29,18 +31,23 @@ const MapScreen: React.FC = () => {
     currentHole,
     setCurrentHole,
     createShot,
-    // deleteShot, // Commented out - not currently used in UI
+    deleteShot,
     clearShots,
     getLastShot,
     getLastShotDistance,
+    updateShots,
   } = useShotManagement();
   
   const [mapCenter, setMapCenter] = useState<Coordinate | null>(null);
   const [showClubSelector, setShowClubSelector] = useState(false);
   const [pendingShot, setPendingShot] = useState<Coordinate | null>(null);
-  const [selectedShot, setSelectedShot] = useState<string | null>(null);
   const [isCalloutVisible, setIsCalloutVisible] = useState(false);
   const [dotToggle, setDotToggle] = useState(true);
+  const [showShotEditor, setShowShotEditor] = useState(false);
+  const [selectedShotData, setSelectedShotData] = useState<GolfShot | null>(null);
+  const [clubSelectionMode, setClubSelectionMode] = useState<'record' | 'add' | 'edit'>('record');
+  const [editingShotId, setEditingShotId] = useState<string | null>(null);
+  const [showPreviousHoles, setShowPreviousHoles] = useState(true);
   
   const mapRef = useRef<MapView>(null);
 
@@ -79,6 +86,7 @@ const MapScreen: React.FC = () => {
     try {
       const camera = await mapRef.current.getCamera();
       setPendingShot(camera.center);
+      setClubSelectionMode('record');
       setShowClubSelector(true);
     } catch (error) {
       console.error('Error getting map center:', error);
@@ -86,28 +94,82 @@ const MapScreen: React.FC = () => {
     }
   };
 
-  const handleClubSelect = (club: string) => {
-    if (pendingShot) {
+  const handleRequestClubSelection = useCallback((mode: 'add' | 'edit', shotId?: string, location?: Coordinate) => {
+    console.log('handleRequestClubSelection called:', { mode, shotId, location });
+
+    // Close the ShotEditor first to prevent multiple triggers
+    setShowShotEditor(false);
+    setSelectedShotData(null);
+
+    if (mode === 'add' && location) {
+      // TODO: Reorder shots by hole or let user define shot order
+      // Batch state updates for add mode
+      setPendingShot(location);
+      setEditingShotId(null);
+      setClubSelectionMode('add');
+      setShowClubSelector(true);
+      console.log('Set up for add mode');
+    } else if (mode === 'edit' && shotId) {
+      // Batch state updates for edit mode
+      setPendingShot(null);
+      setEditingShotId(shotId);
+      setClubSelectionMode('edit');
+      setShowClubSelector(true);
+      console.log('Set up for edit mode:', { shotId });
+    }
+  }, []);
+
+  const handleClubSelect = useCallback((club: string) => {
+    console.log('handleClubSelect called:', { club, clubSelectionMode, pendingShot, editingShotId });
+
+    // Prevent multiple rapid calls by immediately hiding the club selector
+    setShowClubSelector(false);
+
+    if (clubSelectionMode === 'record' && pendingShot) {
+      console.log('Processing record mode');
       createShot({ ...pendingShot, accuracy: 1 }, club);
       centerMapOnLocation(pendingShot.latitude, pendingShot.longitude);
+    } else if (clubSelectionMode === 'add' && pendingShot) {
+      console.log('Processing add mode');
+      createShot({ ...pendingShot, accuracy: 1 }, club);
+      centerMapOnLocation(pendingShot.latitude, pendingShot.longitude);
+    } else if (clubSelectionMode === 'edit' && editingShotId) {
+      console.log('Processing edit mode:', { editingShotId, club });
+      handleEditClub(editingShotId, club);
+    } else {
+      console.log('No matching condition:', { clubSelectionMode, pendingShot, editingShotId });
     }
+
+    // Clean up all state in one batch
+    console.log('Cleaning up club selector state');
+    setClubSelectionMode('record');
     setPendingShot(null);
-    setShowClubSelector(false);
-  };
+    setEditingShotId(null);
+  }, [clubSelectionMode, pendingShot, editingShotId, createShot, updateShots]);
 
-  const handleMarkerPress = (shotId: string) => {
-    setSelectedShot(shotId);
-    setIsCalloutVisible(true);
-  };
+  const handleMarkerPress = useCallback((shotId: string) => {
+    const shot = shots.find(s => s.id === shotId);
+    if (shot) {
+      setSelectedShotData(shot);
+      setShowShotEditor(true);
+    }
+  }, [shots]);
 
-  const handleMarkerDeselect = () => {
-    setSelectedShot(null);
+  const handleMarkerCalloutPress = useCallback(() => {
+    // Also allow callout press to open editor
+    if (selectedShotData) {
+      setShowShotEditor(true);
+    }
+  }, [selectedShotData]);
+
+  const handleMarkerDeselect = useCallback(() => {
+    setSelectedShotData(null);
     setIsCalloutVisible(false);
-  };
+  }, []);
 
   const handleMapPress = () => {
     // When user taps the map, deselect any selected marker and hide callout
-    setSelectedShot(null);
+    setSelectedShotData(null);
     setIsCalloutVisible(false);
   };
   
@@ -120,7 +182,49 @@ const MapScreen: React.FC = () => {
   const handleDotToggle = () => {
     if (dotToggle) setDotToggle(false);
     if (!dotToggle) setDotToggle(true);
-  }
+  };
+
+  const handlePreviousHolesToggle = () => {
+    setShowPreviousHoles(!showPreviousHoles);
+  };
+
+  const handleEditClub = (shotId: string, club: string) => {
+    // Find the shot and update its club
+    const updatedShots = shots.map(shot =>
+      shot.id === shotId ? { ...shot, club } : shot
+    );
+    updateShots(updatedShots);
+  };
+
+  const handleEditLocation = (shotId: string, location: Coordinate) => {
+    const updatedShots = shots.map(shot =>
+      shot.id === shotId ? { ...shot, coordinate: location } : shot
+    );
+    updateShots(updatedShots);
+  };
+
+  // Pre-compute shot markers data to avoid expensive operations during render
+  const shotMarkersData = useMemo(() => {
+    // Filter shots based on toggle state: always show current hole, conditionally show previous holes
+    const filteredShots = showPreviousHoles
+      ? shots
+      : shots.filter(shot => shot.holeNumber === currentHole);
+
+    return filteredShots.map((shot) => {
+      // Find next shot in the same hole for distance calculation
+      const nextShotInHole = shots.find(s =>
+        s.holeNumber === shot.holeNumber &&
+        s.shotNumber === shot.shotNumber + 1
+      );
+
+      return {
+        shot,
+        nextShotCoordinate: nextShotInHole?.coordinate,
+        key: shot.id,
+        onPress: () => handleMarkerPress(shot.id), // Pre-create the callback
+      };
+    });
+  }, [shots, showPreviousHoles, currentHole, handleMarkerPress]);
 
   return (
     <View style={styles.container}>
@@ -136,24 +240,17 @@ const MapScreen: React.FC = () => {
         onRegionChangeComplete={async (region) => setMapCenter(region)}
         onPress={handleMapPress}
       >
-        {shots.map((shot) => {
-          // Find next shot in the same hole for distance calculation
-          const nextShotInHole = shots.find(s =>
-            s.holeNumber === shot.holeNumber &&
-            s.shotNumber === shot.shotNumber + 1
-          );
-
-          return (
-            <ShotMarker
-              key={shot.id}
-              shot={shot}
-              nextShotCoordinate={nextShotInHole?.coordinate}
-              onPress={() => handleMarkerPress(shot.id)}
-              onDeselect={handleMarkerDeselect}
-            />
-          );
-        })}
-        <ShotPath shots={shots} />
+        {shotMarkersData.map(({ shot, nextShotCoordinate, key, onPress }) => (
+          <ShotMarker
+            key={key}
+            shot={shot}
+            nextShotCoordinate={nextShotCoordinate}
+            onPress={onPress}
+            onCalloutPress={handleMarkerCalloutPress}
+            onDeselect={handleMarkerDeselect}
+          />
+        ))}
+        <ShotPath shots={showPreviousHoles ? shots : shots.filter(shot => shot.holeNumber === currentHole)} />
       </MapView>
 
       { dotToggle && mapCenter && !isCalloutVisible && (
@@ -218,6 +315,19 @@ const MapScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
 
+          {/* Previous Holes Toggle button */}
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              !showPreviousHoles && styles.toggleButtonDisabled
+            ]}
+            onPress={handlePreviousHolesToggle}
+          >
+            <Text style={styles.toggleButtonText}>
+              {showPreviousHoles ? '📍' : '🕳️'}
+            </Text>
+          </TouchableOpacity>
+
           {/* Dot Toggle button */}
           <TouchableOpacity
             style={styles.dotToggleButton}
@@ -228,11 +338,28 @@ const MapScreen: React.FC = () => {
         </View>
       </View>
 
+      <ShotEditor
+        visible={showShotEditor}
+        onClose={() => {
+          setShowShotEditor(false);
+          setSelectedShotData(null);
+          setIsCalloutVisible(false);
+        }}
+        selectedShot={selectedShotData}
+        mapCenter={mapCenter}
+        onDeleteShot={deleteShot}
+        onEditLocation={handleEditLocation}
+        onRequestClubSelection={handleRequestClubSelection}
+      />
+
       <ClubSelector
         visible={showClubSelector}
         onSelectClub={handleClubSelect}
         onCancel={() => {
+          console.log('ClubSelector cancelled');
           setPendingShot(null);
+          setEditingShotId(null);
+          setClubSelectionMode('record');
           setShowClubSelector(false);
         }}
       />
@@ -324,7 +451,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dotToggleButtonText: {}
+  dotToggleButtonText: {},
+  toggleButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  toggleButtonText: {
+    fontSize: 20,
+  },
 });
 
 export default MapScreen;

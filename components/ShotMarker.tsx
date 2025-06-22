@@ -47,6 +47,7 @@ const ShotMarker: React.FC<ShotMarkerProps> = ({
       onPress={handlePress}
       onCalloutPress={handleCalloutPress}
       onDeselect={handleDeselect}
+      stopPropagation={true}
     />
   );
 };
