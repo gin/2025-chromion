@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { GolfShot } from '@/models/GolfShot';
 import { UserLocation } from '@/types/geo.types';
 import { loadShotsFromStorage, saveShotsToStorage, clearAllData } from '@/services/storageService';
@@ -8,15 +8,14 @@ export const useShotManagement = () => {
   const [shots, setShots] = useState<GolfShot[]>([]);
   const [currentHole, setCurrentHole] = useState(1);
 
-  // Load shots from storage on initial mount
-  useEffect(() => {
-    const loadData = async () => {
-      const loadedShots = await loadShotsFromStorage();
-      setShots(loadedShots);
-      // TODO: load the last hole number here if stored? (check to see if needed since calc on mount)
-    };
-    loadData();
+  const loadShots = useCallback(async () => {
+    const loadedShots = await loadShotsFromStorage();
+    setShots(loadedShots);
   }, []);
+
+  useEffect(() => {
+    loadShots();
+  }, [loadShots]);
 
   const createShot = (location: UserLocation, club: string) => {
     const currentHoleShots = shots.filter(shot => shot.holeNumber === currentHole);
@@ -73,6 +72,7 @@ export const useShotManagement = () => {
 
   return {
     shots,
+    loadShots,
     currentHole,
     setCurrentHole,
     createShot,
