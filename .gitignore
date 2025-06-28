@@ -1,7 +1,18 @@
+# global
 .env*
-
 .DS_Store
 
+
+# frontend
 # gitignore for now, and to be removed when the project is ready to deploy
 frontend/src/shared/abi/
 frontend/src/shared/addresses.json
+
+
+# mobile-app
+.expo/
+node_modules/
+assets/
+ios/
+expo-env.d.ts
+app.json

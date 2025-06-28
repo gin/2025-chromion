@@ -2,7 +2,29 @@
 
 ## Notes
 ```
-# Frontend
+#-------------------------------------------------------------------------------
+# Mobile app (Expo: iOS)
+# purpose: to record game performance
+#-------------------------------------------------------------------------------
+cd mobile-app
+# Using npm because Expo needs extra setup to use pnpm
+npm install
+npx expo start
+
+
+#-------------------------------------------------------------------------------
+# Smart contract (Foundry)
+# purpose: for money vault
+#-------------------------------------------------------------------------------
+cd contract
+forge build
+
+
+#-------------------------------------------------------------------------------
+# Frontend (Web)
+# purpose: analytics
+#-------------------------------------------------------------------------------
+cd frontend
 pnpm add @rainbow-me/rainbowkit
 pnpm add wagmi viem@2.x @tanstack/react-query
 
