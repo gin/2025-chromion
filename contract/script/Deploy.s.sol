@@ -1,8 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.30;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {Counter} from "../src/Counter.sol";
+import {Vault} from "../src/Vault.sol";
 
 contract DeployScript is Script {
     function setUp() public {}
@@ -13,6 +14,9 @@ contract DeployScript is Script {
 
         Counter counter = new Counter();
         console2.log("Counter deployed at:", address(counter));
+
+        Vault vault = new Vault();
+        console2.log("Vault deployed at:", address(vault));
 
         vm.stopBroadcast();
     }
