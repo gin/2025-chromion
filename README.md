@@ -1,4 +1,21 @@
 # 2025-chromion
+## Quick start
+```
+# Install dependencies (Foundry, Expo, Next, and the dependencies within those)
+make install
+
+# Open a new terminal window to start a local blockchain
+make anvil
+
+# Deploy vault
+make deploy
+
+# Try out the mobile app
+make dev.mobile
+
+# Try out the web app
+make dev.web
+```
 
 ## Notes
 ```
