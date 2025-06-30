@@ -17,13 +17,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "This app needs access to location when open to track your golf shots with high precision.",
-        // NSLocationAlwaysUsageDescription: "This app needs access to location when in the background for continuous shot tracking.",
-        // NSLocationAlwaysAndWhenInUseUsageDescription: "For the most accurate shot tracking, please allow location access at all times.",
-        // NSLocationAccuracyUsageDescription: "This app requires high accuracy location data to precisely track your golf shots.",
-        // NSLocationTemporaryUsageDescriptionDictionary: {
-        //   "GPSTracking": "This app requires high-precision GPS data to accurately measure golf shot distances"
-        // },
-        // UIBackgroundModes: ["location", "fetch"],
         UIRequiredDeviceCapabilities: ["gps", "location-services"],
         NSLocationUsageDescription: "This app uses your location to track golf shots and calculate distances.",
       },
@@ -53,13 +46,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     plugins: [
       "expo-router",
       "expo-location",
-      // [
-      //   "expo-location",
-      //   {
-      //     locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to track your golf shots.",
-      //     locationAlwaysPermission: "Allow $(PRODUCT_NAME) to use your location to track your golf shots.",
-      //   },
-      // ],
       [
         "expo-splash-screen",
         {

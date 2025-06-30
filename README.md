@@ -7,6 +7,10 @@
 # purpose: to record game performance
 #-------------------------------------------------------------------------------
 cd mobile-app
+
+# Copy and paste your Google Maps API key to create a .env file
+echo "EXPO_PUBLIC_GOOGLE_MAPS_KEY=your_google_maps_api_key" > .env 
+
 # Using npm because Expo needs extra setup to use pnpm
 npm install
 npx expo start
